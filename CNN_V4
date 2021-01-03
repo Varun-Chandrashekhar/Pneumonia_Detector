@@ -1,0 +1,66 @@
+Dataset_Folder = 'Dataset' % Declaring Variable for dataset folder name
+Iteration_Number = 10 % Declaring number of Iterations
+MaxEpochs = 'MaxEpochs' % Declaring Number of Epochs 'MaxEpochs'
+
+Dataset = imageDatastore(Dataset_Folder,'IncludeSubfolders',true,'LabelSource','foldernames'); % Storing Dataset in a Veriabl
+
+[Training_Dataset,Validation_Dataset] = splitEachLabel(Dataset,0.7); % Splitting Dataset
+
+net = googlenet; % Importing Googlenet
+analyzeNetwork(net) % Code Visualize Network
+
+Input_Layer_Size = net.Layers(1).InputSize % Variable for Input Image Size
+
+Layer_Graph = layerGraph(net); % Googlenet archeticture
+
+Feature_Learner = net.Layers(142); % Storing Classification Layer into variable
+
+Output_Classifier = net.Layers(144); % Storing Classification Layer into variable
+
+Number_of_Classes = numel(categories(Training_Dataset.Labels)); % finding out how many classes are in your dataset
+
+New_Feature_Learner = fullyConnectedLayer(Number_of_Classes, ... % Creating a Fully Connected Layer
+    'Name','Facial Feature Learner',  ...
+    'WeightLearnRateFactor',10, ...
+    'BiasLearnRateFactor',10);
+
+New_Classifier_Layer = classificationLayer('Name', 'Face Classifier'); % Creating a New Classification Layer
+
+Layer_Graph = replaceLayer(Layer_Graph, Feature_Learner.Name, New_Feature_Learner); % Replacing Input and Output Layers in the Googlenet
+
+Layer_Graph = replaceLayer(Layer_Graph, Output_Classifier.Name, New_Classifier_Layer); % Replacing Input and Output Layers in the Googlenet
+analyzeNetwork(Layer_Graph) % Code Visualize Network
+
+Pixel_Range = [-30 30]; % Declaring Range for adding noise
+Scale_Range = [0.9 1.1]; % Declaring Range for adding noise
+
+Image_Augmenter = imageDataAugmenter(... % Modifying Image to Prevent overfitting
+    'RandXReflection', true, ...
+    'RandXTranslation', Pixel_Range, ...
+    'RandYTranslation', Pixel_Range, ...
+    'RandXScale', Scale_Range, ...
+    'RandYScale', Scale_Range);
+
+Augmented_Training_Image = augmentedImageDatastore(Input_Layer_Size(1:2),Training_Dataset, ... % Storing Image Size and Source
+    'DataAugmentation',Image_Augmenter);
+
+Augmented_Validation_Image = augmentedImageDatastore(Input_Layer_Size(1:2),Validation_Dataset); % Storing Image Size and Source
+
+Size_of_Minibatch = 5; % Using the Minibatch Training Method
+
+Validation_Frequency = floor(numel(Augmented_Training_Image.Files)/Size_of_Minibatch); % Declaring the Validation Frequency
+
+Training_Options = trainingOptions( 'sgdm', ... % Declaring Training Options
+    'MiniBatchSize', Size_of_Minibatch, ...
+     MaxEpochs, Iteration_Number, ...
+    'InitialLearnRate', 3e-4, ...
+    'Shuffle', 'every-epoch', ...
+    'ValidationData', Augmented_Validation_Image, ...
+    'ValidationFrequency', Validation_Frequency, ...
+    'Verbose', false, ...
+    'Plots', 'training-progress')
+
+net = trainNetwork(Augmented_Training_Image, Layer_Graph, Training_Options); % Training the Data
+
+test_network(net, 'E_1.png')
+
